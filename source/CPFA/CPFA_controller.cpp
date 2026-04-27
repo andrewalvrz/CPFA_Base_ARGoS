@@ -14,12 +14,14 @@ CPFA_controller::CPFA_controller() :
 	LoopFunctions(NULL),
 	survey_count(0),
 	isUsingPheromone(0),
-    SiteFidelityPosition(1000, 1000), 
+    SiteFidelityPosition(1000, 1000),
         searchingTime(0),
         travelingTime(0),
         startTime(0),
     m_pcLEDs(NULL),
-        updateFidelity(false)
+        updateFidelity(false),
+        siteVisitCount(0),
+        giveUpCount(0)
 {
 }
 
@@ -133,6 +135,8 @@ void CPFA_controller::Reset() {
 	isInformed = false;
 	isHoldingFood = false;
 	isUsingSiteFidelity = false;
+	siteVisitCount = 0;
+	giveUpCount = 0;
 	isGivingUpSearch = false;
 }
 
@@ -332,15 +336,15 @@ void CPFA_controller::Searching() {
      if(distance.SquareLength() < TargetDistanceTolerance) {
          // randomly give up searching
          if(SimulationTick()% (5*SimulationTicksPerSecond())==0 && random < LoopFunctions->ProbabilityOfReturningToNest) {
-             
+             giveUpCount++;
              SetFidelityList();
 	      TrailToShare.clear();
              SetIsHeadingToNest(true);
              SetTarget(LoopFunctions->NestPosition);
              isGivingUpSearch = true;
 	     LoopFunctions->FidelityList.erase(controllerID);
-             isUsingSiteFidelity = false; 
-             updateFidelity = false; 
+             isUsingSiteFidelity = false;
+             updateFidelity = false;
              CPFA_state = RETURNING;
              searchingTime+=SimulationTick()-startTime;
              startTime = SimulationTick();
@@ -511,6 +515,8 @@ void CPFA_controller::Returning() {
                 argos::Real timeInSeconds = (argos::Real)(SimulationTick() / SimulationTicksPerSecond());
 		        Pheromone sharedPheromone(SiteFidelityPosition, TrailToShare, timeInSeconds, LoopFunctions->RateOfPheromoneDecay, ResourceDensity);
                 LoopFunctions->PheromoneList.push_back(sharedPheromone);
+
+				LocalPheromoneList.push_back(sharedPheromone); 
                 sharedPheromone.Deactivate(); // make sure this won't get re-added later...
           }
           TrailToShare.clear();  
@@ -522,25 +528,40 @@ void CPFA_controller::Returning() {
 	    //log_output_stream.open("cpfa_log.txt", ios::app);
 	    //log_output_stream << "At the nest." << endl;	    
 	 
-	    // use site fidelity
-	    if(updateFidelity && poissonCDF_sFollowRate > r2) {
-		    //log_output_stream << "Using site fidelity" << endl;
+	    // use site fidelity — widen search radius with each revisit
+	    if(updateFidelity && poissonCDF_sFollowRate > r2 && giveUpCount < 3) {
 		        SetIsHeadingToNest(false);
-		        SetTarget(SiteFidelityPosition);
+		        // Expand search ring outward on successive visits (0.8m per visit, max 4m)
+		        argos::Real searchRadius = argos::Min((argos::Real)siteVisitCount * 0.8, (argos::Real)4.0);
+		        argos::Real angle = RNG->Uniform(argos::CRange<argos::Real>(0.0, argos::CRadians::TWO_PI.GetValue()));
+		        argos::CVector2 offset(searchRadius * cos(angle), searchRadius * sin(angle));
+		        argos::CVector2 widenedTarget = SiteFidelityPosition + offset;
+		        // clamp to arena bounds
+		        widenedTarget.SetX(argos::Max((argos::Real)-4.5, argos::Min((argos::Real)4.5, widenedTarget.GetX())));
+		        widenedTarget.SetY(argos::Max((argos::Real)-4.5, argos::Min((argos::Real)4.5, widenedTarget.GetY())));
+		        SetTarget(widenedTarget);
 		        isInformed = true;
+		        siteVisitCount++;
+		        giveUpCount = 0;
 	    }
-      // use pheromone waypoints
+      // use pheromone waypoints — add small jitter so robots don't pile on same spot
       else if(SetTargetPheromone()) {
-          //log_output_stream << "Using site pheremone" << endl;
+          argos::Real jitterAngle = RNG->Uniform(argos::CRange<argos::Real>(0.0, argos::CRadians::TWO_PI.GetValue()));
+          argos::Real jitterDist  = RNG->Uniform(argos::CRange<argos::Real>(0.0, (argos::Real)0.8));
+          argos::CVector2 jitter(jitterDist * cos(jitterAngle), jitterDist * sin(jitterAngle));
+          SetTarget(GetTarget() + jitter);
           isInformed = true;
           isUsingSiteFidelity = false;
+          siteVisitCount = 0;
+          giveUpCount = 0;
       }
-       // use random search
+       // use random search (forced here if giveUpCount >= 3, or no pheromones)
       else {
-           //log_output_stream << "Using random search" << endl;
             SetRandomSearchLocation();
             isInformed = false;
             isUsingSiteFidelity = false;
+            siteVisitCount = 0;
+            giveUpCount = 0;
       }
 
 	isGivingUpSearch = false;
@@ -551,8 +572,13 @@ void CPFA_controller::Returning() {
                 
     }
 	// Take a small step towards the nest so we don't overshoot by too much is we miss it
-    else 
+    else
     {
+        // Build pheromone trail waypoints while carrying food back
+        if(IsHoldingFood() && SimulationTick() % LoopFunctions->DrawDensityRate == 0) {
+            TrailToShare.push_back(GetPosition());
+        }
+
         if(IsAtTarget())
         {
         //argos::LOG<<"heading to true in returning"<<endl;
@@ -915,4 +941,39 @@ void CPFA_controller::UpdateTargetRayList() {
 	}
 }
 
+void CPFA_controller::ReceivePheromones(std::vector<Pheromone> incoming) {
+    argos::Real t = (argos::Real)(SimulationTick() / SimulationTicksPerSecond());
+    for (Pheromone inWP : incoming) {
+        if (!inWP.IsActive()) continue;
+        bool alreadyKnown = false;
+        for (Pheromone& myWP : LocalPheromoneList) {
+            if ((myWP.GetLocation() - inWP.GetLocation()).Length() < 0.15) {
+                if (inWP.GetWeight() > myWP.GetWeight())
+                    myWP = inWP;
+                alreadyKnown = true;
+                break;
+            }
+        }
+        if (!alreadyKnown) {
+            LocalPheromoneList.push_back(inWP);
+        }
+    }
+    // Decay and prune local list
+    std::vector<Pheromone> active;
+    for (Pheromone& p : LocalPheromoneList) {
+        p.Update(t);
+        if (p.IsActive()) active.push_back(p);
+    }
+    LocalPheromoneList = active;
+}
+
+
+
+
+
+
+
+
 REGISTER_CONTROLLER(CPFA_controller, "CPFA_controller")
+
+

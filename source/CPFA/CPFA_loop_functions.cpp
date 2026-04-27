@@ -178,6 +178,7 @@ void CPFA_loop_functions::PreStep() {
 
 
 	   UpdatePheromoneList();
+	   SharePheromonesAmongNeighbors();
 
 	   if(GetSpace().GetSimulationClock() > ResourceDensityDelay) {
         for(size_t i = 0; i < FoodColoringList.size(); i++) {
@@ -629,5 +630,39 @@ void CPFA_loop_functions::ConfigureFromGenome(Real* g)
 	RateOfLayingPheromone             = g[5];
 	RateOfPheromoneDecay              = g[6];
 }
+
+void CPFA_loop_functions::SharePheromonesAmongNeighbors() {
+    // Collect all robots
+    std::vector<CPFA_controller*> controllers;
+    CSpace::TMapPerType& footBots = GetSpace().GetEntitiesByType("foot-bot");
+    for (auto& pair : footBots) {
+        CFootBotEntity* fb = any_cast<CFootBotEntity*>(pair.second);
+        CPFA_controller* ctrl = dynamic_cast<CPFA_controller*>(
+            &fb->GetControllableEntity().GetController());
+        if (ctrl) controllers.push_back(ctrl);
+    }
+
+    // Check every pair — share if within 2 meters
+    for (size_t i = 0; i < controllers.size(); i++) {
+        for (size_t j = i + 1; j < controllers.size(); j++) {
+            CVector2 posA = controllers[i]->GetPosition();
+            CVector2 posB = controllers[j]->GetPosition();
+            if ((posA - posB).Length() <= 2.0) {
+                std::vector<Pheromone> listA = controllers[i]->GetLocalPheromones();
+                std::vector<Pheromone> listB = controllers[j]->GetLocalPheromones();
+                controllers[i]->ReceivePheromones(listB);
+                controllers[j]->ReceivePheromones(listA);
+            }
+        }
+    }
+}
+
+
+
+
+
+
+
+
 
 REGISTER_LOOP_FUNCTIONS(CPFA_loop_functions, "CPFA_loop_functions")

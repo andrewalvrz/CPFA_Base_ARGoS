@@ -32,6 +32,15 @@ class CPFA_controller : public BaseController {
 		Real FoodDistanceTolerance;
 
 		void SetLoopFunctions(CPFA_loop_functions* lf);
+
+
+		void RecievePheromones(const std::vector<Pheromone>& incoming);
+
+		void ReceivePheromones(std::vector<Pheromone> incoming);
+		const std::vector<Pheromone>& GetLocalPheromones()const {
+
+			return LocalPheromoneList;
+		}
   
   size_t     GetSearchingTime();//qilu 09/26/2016
   size_t      GetTravelingTime();//qilu 09/26/2016
@@ -47,6 +56,7 @@ class CPFA_controller : public BaseController {
 
 		/* pheromone trail variables */
 		std::vector<argos::CVector2> TrailToShare;
+		std::vector<Pheromone> LocalPheromoneList;
 		std::vector<argos::CVector2> TrailToFollow;
 		std::vector<argos::CRay3>    MyTrail;
 
@@ -106,6 +116,8 @@ class CPFA_controller : public BaseController {
 		bool isUsingPheromone;
 
 		unsigned int survey_count;
+		unsigned int siteVisitCount; // how many times returned to same food site
+		unsigned int giveUpCount;    // how many times gave up without finding food
 		/* Pointer to the LEDs actuator */
         CCI_LEDsActuator* m_pcLEDs;
 };

@@ -50,6 +50,7 @@ class CPFA_loop_functions : public argos::CLoopFunctions
 	
 		/* public helper functions */
 		void UpdatePheromoneList();
+		void SharePheromonesAmongNeighbors();
 		void SetFoodDistribution();
 
 		argos::Real getSimTimeInSeconds();

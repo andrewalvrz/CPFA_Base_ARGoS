@@ -1,0 +1,10 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/dex/robotics-finalproject/Collision_Free_CPFA/build/cmake_install.cmake",
+		"/home/dex/robotics-finalproject/Collision_Free_CPFA/build/source/cmake_install.cmake",
+		"/home/dex/robotics-finalproject/Collision_Free_CPFA/build/source/Base/cmake_install.cmake",
+		"/home/dex/robotics-finalproject/Collision_Free_CPFA/build/source/CPFA/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
