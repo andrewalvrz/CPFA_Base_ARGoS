@@ -122,6 +122,64 @@ To run an experiment launch ARGoS with the XML configuration file for your syste
   ```
 
 
+---
+
+### Building and Running Trail_Test_r4
+
+#### 1. Build
+
+From the project root, run the build script (wipes and recreates `build/`, then compiles):
+
+```bash
+cd /path/to/Collision_Free_CPFA
+bash build.sh
+```
+
+Or, if CMake is already configured and you just want to recompile:
+
+```bash
+cd build
+make
+```
+
+For a manual clean build:
+
+```bash
+rm -rf build && mkdir build && cd build
+cmake -DBUILD_EVOLVER=NO -DCMAKE_BUILD_TYPE=Release ..
+make
+```
+
+#### 2. Create the results directory
+
+The experiment writes output to `results/`. Create it if it doesn't exist:
+
+```bash
+mkdir -p results
+```
+
+#### 3. Run the experiment
+
+**Important:** Run `argos3` from the project root — the XML uses paths relative to it (e.g. `build/source/CPFA/libCPFA_controller`).
+
+```bash
+cd /path/to/Collision_Free_CPFA
+argos3 -c experiments/Trail_Test_r4.xml
+```
+
+#### Experiment configuration summary (Trail_Test_r4.xml)
+
+| Parameter | Value |
+|:---|:---|
+| Arena size | 10 x 10 |
+| Food items | 50 (random distribution, 4 clusters) |
+| Simulation length | 6000 ticks (32 ticks/sec) |
+| Max real time | 1800 seconds |
+| Draw trails | Enabled |
+| Results output | `results/` |
+
+---
+
 ###Useful Links
 
 | Description                                | Website                                                        |
