@@ -1,6 +1,82 @@
-#CPFA-ARGoS
+#CPFA-ARGoS — Collision-Free Extension
 
 ARGoS (Autonomous Robots Go Swarming) is a multi-physics robot simulator. iAnt-ARGoS is an extension to ARGoS that implements the CPFA-ARGoS algorithm and provides a mechanism for performing experiments with iAnts.
+
+---
+
+## What We Changed from the Original CPFA
+
+The original CPFA is a central-pheromone foraging algorithm where all robots share a global pheromone list and use **site fidelity** (returning to the exact same food location) and **pheromone following** (going to wherever another robot found food). The problem this creates is that many robots converge on the exact same spot, causing clustering and inefficient collisions.
+
+Our modifications target three specific failure modes: robots stacking on the same pheromone waypoint, robots endlessly revisiting a depleted food site, and pheromone knowledge being siloed to each individual robot.
+
+---
+
+### 1. Peer-to-Peer Pheromone Sharing (`CPFA_loop_functions.cpp`)
+
+**Original:** All robots read from one shared global `PheromoneList` maintained by the loop functions.
+
+**Ours:** Every robot now has its own `LocalPheromoneList`. Each simulation step, `SharePheromonesAmongNeighbors()` checks every pair of robots — if two robots are within **2 meters** of each other, they exchange and merge their local pheromone lists. This means pheromone knowledge spreads organically through proximity rather than being broadcast to everyone at once.
+
+```
+if (distance between robot A and robot B) <= 2.0 meters:
+    A receives B's local pheromones
+    B receives A's local pheromones
+```
+
+---
+
+### 2. Adaptive Site Fidelity with Expanding Search Radius (`CPFA_controller.cpp`)
+
+**Original:** A robot using site fidelity returns to the *exact* `SiteFidelityPosition` every time — multiple robots pile on the same coordinate.
+
+**Ours:** On each revisit to a food site, the robot searches in an **expanding ring** around the original location, widening by 0.8 meters per visit up to a maximum of 4 meters. This spreads robots across the food cluster rather than stacking them.
+
+```
+searchRadius = min(siteVisitCount * 0.8, 4.0)
+target = SiteFidelityPosition + random offset at that radius
+```
+
+A **give-up counter** was also added: if a robot fails to find food and returns to nest 3 or more times in a row (`giveUpCount >= 3`), it abandons site fidelity entirely and switches to random search. This prevents robots from wasting time on truly depleted areas.
+
+---
+
+### 3. Pheromone Jitter (`CPFA_controller.cpp`)
+
+**Original:** When following a pheromone waypoint, a robot goes to the exact waypoint location — again causing stacking.
+
+**Ours:** A small random displacement (up to **0.8 meters**) is added to the waypoint target before the robot heads there. This spreads pheromone-following robots across a small area instead of funneling them to a single point.
+
+```
+jitter = random direction, random distance in [0, 0.8m]
+target = pheromoneTarget + jitter
+```
+
+---
+
+### 4. Trail Recording While Returning (`CPFA_controller.cpp`)
+
+**Original:** Robots only record trail waypoints during the outbound (searching) leg.
+
+**Ours:** Robots also record their position as trail waypoints while **carrying food back to the nest** (sampled at `DrawDensityRate` ticks). This creates a more complete bidirectional trail that other robots can follow.
+
+---
+
+### 5. New Experiment: `Trail_Test_r4.xml`
+
+A new experiment configuration was created specifically for testing these features:
+
+| Parameter | Value |
+|:---|:---|
+| Robots | 24 (4 groups of 6, placed in 2×3 grids near center) |
+| Food items | 50, clustered (4 clusters) |
+| Arena | 10×10 |
+| Trails drawn | Yes (`DrawTrails="1"`) |
+| Visualization | Enabled (qt-opengl) |
+
+The robot placement groups robots near the center so pheromone sharing via proximity kicks in early in the simulation.
+
+---
 
 ###Quick Start Installation Guide
 
