@@ -1,5 +1,6 @@
 #include "CPFA_controller.h"
 #include <unistd.h>
+#include <algorithm>
 
 CPFA_controller::CPFA_controller() :
 	RNG(argos::CRandom::CreateRNG("argos")),
@@ -464,8 +465,11 @@ void CPFA_controller::Surveying() {
 		log_output_stream.close();
 		*/
 		
-		if(fabs((GetHeading() - rotation).SignedNormalize().GetValue()) < TargetAngleTolerance.GetValue()) survey_count++;
-			//else Keep trying to reach the turning angle
+		// if(fabs((GetHeading() - rotation).SignedNormalize().GetValue()) < TargetAngleTolerance.GetValue()) survey_count++;
+		// joanna: get unstuck from surveying state when picking up
+		if(fabs((GetHeading() - rotation).SignedNormalize().GetValue()) < 0.5) survey_count++;
+		
+		// 	//else Keep trying to reach the turning angle
 	}
 	// Set the survey countdown
 	else {
@@ -511,12 +515,20 @@ void CPFA_controller::Returning() {
 		  LoopFunctions->currNumCollectedFood++;
           LoopFunctions->setScore(num_targets_collected);
           if(poissonCDF_pLayRate > r1 && updateFidelity) {
+				// joanna : debugging pheromone waypoint 
+				argos::LOG << "Laying pheromone at: " << SiteFidelityPosition << std::endl;
 	            TrailToShare.push_back(LoopFunctions->NestPosition); //qilu 07/26/2016
                 argos::Real timeInSeconds = (argos::Real)(SimulationTick() / SimulationTicksPerSecond());
 		        Pheromone sharedPheromone(SiteFidelityPosition, TrailToShare, timeInSeconds, LoopFunctions->RateOfPheromoneDecay, ResourceDensity);
-                LoopFunctions->PheromoneList.push_back(sharedPheromone);
+                // LoopFunctions->PheromoneList.push_back(sharedPheromone); -- pushes pheromone globally
 
-				LocalPheromoneList.push_back(sharedPheromone); 
+				// **-- Joanna: Instead push pheromone locally so it is shared based on proximity
+				// only those close to robot will have access to it
+				// PheromoneList.push_back(sharedPheromone);
+
+				LocalPheromoneList.push_back(sharedPheromone);
+				//LoopFunctions->PheromoneList.push_back(sharedPheromone); 
+
                 sharedPheromone.Deactivate(); // make sure this won't get re-added later...
           }
           TrailToShare.clear();  
@@ -648,11 +660,19 @@ void CPFA_controller::SetHoldingFood() {
 		         for(i = 0; i < LoopFunctions->FoodList.size(); i++) {
 			            if((GetPosition() - LoopFunctions->FoodList[i]).SquareLength() < FoodDistanceTolerance ) {
 		          // We found food! Calculate the nearby food density.
-	        	             isHoldingFood = true;
-		                     CPFA_state = SURVEYING;
-	        	             j = i + 1;
-                                     searchingTime+=SimulationTick()-startTime;
-                                     startTime = SimulationTick();
+	        	            //  isHoldingFood = true;
+		                    //  CPFA_state = SURVEYING;
+	        	            //  j = i + 1;
+                            //          searchingTime+=SimulationTick()-startTime;
+                            //          startTime = SimulationTick();
+
+							isHoldingFood = true;
+							CPFA_state = RETURNING;
+							SetIsHeadingToNest(true);
+							SetTarget(LoopFunctions->NestPosition);
+							searchingTime += SimulationTick() - startTime;
+							startTime = SimulationTick();
+							j = i + 1;
 				   //distribute a new food 
 			         argos::CVector2 placementPosition;
 			         placementPosition.Set(RNG->Uniform(ForageRangeX), RNG->Uniform(ForageRangeY));
@@ -801,36 +821,40 @@ bool CPFA_controller::SetTargetPheromone() {
 	argos::Real maxStrength = 0.0, randomWeight = 0.0;
 	bool isPheromoneSet = false;
 
- if(LoopFunctions->PheromoneList.size()==0) return isPheromoneSet; //the case of no pheromone.
+// -- Previous implementation ignore local pheromone list and queries global pheromone list
+//  if(LoopFunctions->PheromoneList.size()==0) return isPheromoneSet; //the case of no pheromone.
+
+// **- Joanna : Access local pheromone list to ignore global
+ if(LocalPheromoneList.size()==0) return isPheromoneSet;
 	/* update the pheromone list and remove inactive pheromones */
 
 	/* default target = nest; in case we have 0 active pheromones */
 	//SetIsHeadingToNest(true);
 	//SetTarget(LoopFunctions->NestPosition);
 	/* Calculate a maximum strength based on active pheromone weights. */
-	for(size_t i = 0; i < LoopFunctions->PheromoneList.size(); i++) {
-		if(LoopFunctions->PheromoneList[i].IsActive()) {
-			maxStrength += LoopFunctions->PheromoneList[i].GetWeight();
+	for(size_t i = 0; i < LocalPheromoneList.size(); i++) {
+		if(LocalPheromoneList[i].IsActive()) {
+			maxStrength += LocalPheromoneList[i].GetWeight();
 		}
 	}
 
 	/* Calculate a random weight. */
 	randomWeight = RNG->Uniform(argos::CRange<argos::Real>(0.0, maxStrength));
-
+	// **Joanna-- Set to local
 	/* Randomly select an active pheromone to follow. */
-	for(size_t i = 0; i < LoopFunctions->PheromoneList.size(); i++) {
-		   if(randomWeight < LoopFunctions->PheromoneList[i].GetWeight()) {
+	for(size_t i = 0; i < LocalPheromoneList.size(); i++) {
+		   if(randomWeight < LocalPheromoneList[i].GetWeight()) {
 			       /* We've chosen a pheromone! */
 			       SetIsHeadingToNest(false);
-          SetTarget(LoopFunctions->PheromoneList[i].GetLocation());
-          TrailToFollow = LoopFunctions->PheromoneList[i].GetTrail();
+          SetTarget(LocalPheromoneList[i].GetLocation());
+          TrailToFollow = LocalPheromoneList[i].GetTrail();
           isPheromoneSet = true;
           /* If we pick a pheromone, break out of this loop. */
           break;
      }
 
      /* We didn't pick a pheromone! Remove its weight from randomWeight. */
-     randomWeight -= LoopFunctions->PheromoneList[i].GetWeight();
+     randomWeight -= LocalPheromoneList[i].GetWeight();
 	}
 
 	//ofstream log_output_stream;
@@ -942,6 +966,7 @@ void CPFA_controller::UpdateTargetRayList() {
 }
 
 void CPFA_controller::ReceivePheromones(std::vector<Pheromone> incoming) {
+
     argos::Real t = (argos::Real)(SimulationTick() / SimulationTicksPerSecond());
     for (Pheromone inWP : incoming) {
         if (!inWP.IsActive()) continue;
@@ -958,6 +983,18 @@ void CPFA_controller::ReceivePheromones(std::vector<Pheromone> incoming) {
             LocalPheromoneList.push_back(inWP);
         }
     }
+
+	// Bound local list to size of 8
+	int MAX_LOCAL_PHEROMONES = 8;
+
+	// Bound the amount of pheromone trail in list for each robot
+	// based on that pheromones weight & sort it from highest to lowest (most intensity)
+	if (LocalPheromoneList.size() > MAX_LOCAL_PHEROMONES) {
+    std::sort(LocalPheromoneList.begin(), LocalPheromoneList.end(),
+        [](Pheromone& a, Pheromone& b){ return a.GetWeight() > b.GetWeight(); });
+    LocalPheromoneList.erase(LocalPheromoneList.begin() + MAX_LOCAL_PHEROMONES, LocalPheromoneList.end());
+	}
+
     // Decay and prune local list
     std::vector<Pheromone> active;
     for (Pheromone& p : LocalPheromoneList) {
