@@ -191,6 +191,22 @@ void CPFA_loop_functions::PreStep() {
 	PheromoneList.clear();
         TargetRayList.clear();
     }
+
+	// visualize waypoints
+	PheromoneList.clear();
+	CSpace::TMapPerType& footBots = GetSpace().GetEntitiesByType("foot-bot");
+	for (auto& pair : footBots) {
+		CFootBotEntity* fb = any_cast<CFootBotEntity*>(pair.second);
+		CPFA_controller* ctrl = dynamic_cast<CPFA_controller*>(
+			&fb->GetControllableEntity().GetController());
+		if (ctrl) {
+			for (const Pheromone& p : ctrl->GetLocalPheromones()) {
+				PheromoneList.push_back(p);
+			}
+		}
+	}
+
+
 }
 
 void CPFA_loop_functions::PostStep() {
@@ -322,15 +338,15 @@ void CPFA_loop_functions::UpdatePheromoneList() {
 	//log_output_stream.open("time.txt", ios::app);
 	//log_output_stream << t << ", " << GetSpace().GetSimulationClock() << ", " << GetSimulator().GetPhysicsEngine("default").GetInverseSimulationClockTick() << endl;
 	//log_output_stream.close();
-	    for(size_t i = 0; i < PheromoneList.size(); i++) {
 
-		PheromoneList[i].Update(t);
-		if(PheromoneList[i].IsActive()) {
-			new_p_list.push_back(PheromoneList[i]);
-		}
-      }
-     	PheromoneList = new_p_list;
-	new_p_list.clear();
+	// **--Joanna: instead of updating global list, only update robot's local list
+	 for(size_t i = 0; i < PheromoneList.size(); i++) {
+        PheromoneList[i].Update(t);
+        if(PheromoneList[i].IsActive()) {
+            new_p_list.push_back(PheromoneList[i]);
+        }
+    }
+    PheromoneList = new_p_list;
 }
 void CPFA_loop_functions::SetFoodDistribution() {
 	switch(FoodDistribution) {
@@ -631,6 +647,8 @@ void CPFA_loop_functions::ConfigureFromGenome(Real* g)
 	RateOfPheromoneDecay              = g[6];
 }
 
+// Allows robot neighbors to share information with each other
+// If robots are within 2 meters of each other, they exchange information
 void CPFA_loop_functions::SharePheromonesAmongNeighbors() {
     // Collect all robots
     std::vector<CPFA_controller*> controllers;
@@ -642,12 +660,14 @@ void CPFA_loop_functions::SharePheromonesAmongNeighbors() {
         if (ctrl) controllers.push_back(ctrl);
     }
 
-    // Check every pair — share if within 2 meters
+    // Check every pair — share if within 2 meters 
+
+	// joanna - changed to 4 meters insted to speed up information sharing process
     for (size_t i = 0; i < controllers.size(); i++) {
         for (size_t j = i + 1; j < controllers.size(); j++) {
             CVector2 posA = controllers[i]->GetPosition();
             CVector2 posB = controllers[j]->GetPosition();
-            if ((posA - posB).Length() <= 2.0) {
+            if ((posA - posB).Length() <= 4.0) {
                 std::vector<Pheromone> listA = controllers[i]->GetLocalPheromones();
                 std::vector<Pheromone> listB = controllers[j]->GetLocalPheromones();
                 controllers[i]->ReceivePheromones(listB);
