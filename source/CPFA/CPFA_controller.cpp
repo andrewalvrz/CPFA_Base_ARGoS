@@ -107,6 +107,19 @@ void CPFA_controller::ControlStep() {
 
 	previous_position = GetPosition();
 
+
+
+	// -- Joanna Decay and prune local pheromone list every half-second
+		if ((SimulationTick() % (SimulationTicksPerSecond() / 2)) == 0) {
+			// argos::Real t = (argos::Real)(SimulationTick() / SimulationTicksPerSecond());
+			std::vector<Pheromone> active;
+			for (Pheromone& p : LocalPheromoneList) {
+				// p.Update(t);
+				if (p.IsActive()) active.push_back(p);
+			}
+			LocalPheromoneList = active;
+		}
+
 	//UpdateTargetRayList();
 	CPFA();
 	Move();
@@ -162,9 +175,7 @@ void CPFA_controller::CPFA() {
 		case SEARCHING:
 			//argos::LOG << "SEARCHING" << std::endl;
 			//SetIsHeadingToNest(false);
-			if((SimulationTick() % (SimulationTicksPerSecond() / 2)) == 0) {
 				Searching();
-			}
 			break;
 		// return to nest after food pick up or giving up searching()
 		case RETURNING:
@@ -288,13 +299,17 @@ void CPFA_controller::Departing()
                  argos::CRadians angle1(rotation.UnsignedNormalize());
                  argos::CRadians angle2(GetHeading().UnsignedNormalize());
                  argos::CRadians turn_angle(angle1 + angle2);
-                 argos::CVector2 turn_vector(SearchStepSize, turn_angle);
+                 argos::CVector2 turn_vector(SearchStepSize * 6, turn_angle);
                  SetIsHeadingToNest(false);
                  SetTarget(turn_vector + GetPosition());
              }
-             else if(distanceToTarget < TargetDistanceTolerance){
-                 SetRandomSearchLocation();
-             }
+            //  else if(distanceToTarget < TargetDistanceTolerance){
+            //      SetRandomSearchLocation();
+            //  }
+			// changed due to robots stopping suddenly
+			else if(distanceToTarget < TargetDistanceTolerance || distanceToTarget > 3.0){
+					SetRandomSearchLocation();
+				}
          }
      }
 	
@@ -334,7 +349,11 @@ void CPFA_controller::Searching() {
      // If we reached our target search location, set a new one. The 
      // new search location calculation is different based on whether
      // we are currently using informed or uninformed search.
-     if(distance.SquareLength() < TargetDistanceTolerance) {
+
+	 // made change here due to robots stopping suddenly 
+	 if(distance.SquareLength() < TargetDistanceTolerance || distance.SquareLength() > SearchStepSize * SearchStepSize * 4) {
+
+    //  if(distance.SquareLength() < TargetDistanceTolerance) {
          // randomly give up searching
          if(SimulationTick()% (5*SimulationTicksPerSecond())==0 && random < LoopFunctions->ProbabilityOfReturningToNest) {
              giveUpCount++;
@@ -369,7 +388,7 @@ void CPFA_controller::Searching() {
           argos::CRadians angle1(rotation);
           argos::CRadians angle2(GetHeading());
           argos::CRadians turn_angle(angle1 + angle2);
-          argos::CVector2 turn_vector(SearchStepSize, turn_angle);
+          argos::CVector2 turn_vector(SearchStepSize * 6, turn_angle);
       
           //argos::LOG << "UNINFORMED SEARCH: rotation: " << angle1 << std::endl;
           //argos::LOG << "UNINFORMED SEARCH: old heading: " << angle2 << std::endl;
@@ -558,8 +577,17 @@ void CPFA_controller::Returning() {
 	    }
       // use pheromone waypoints — add small jitter so robots don't pile on same spot
       else if(SetTargetPheromone()) {
+
+		// **-- Joanna: debugging pheromone waypoint
+    argos::LOG << GetId() << " following pheromone to: " 
+               << GetTarget().GetX() << ", " << GetTarget().GetY() 
+               << " | local list size: " << LocalPheromoneList.size()
+               << " | weight: " << LocalPheromoneList[0].GetWeight()
+               << std::endl;
+
           argos::Real jitterAngle = RNG->Uniform(argos::CRange<argos::Real>(0.0, argos::CRadians::TWO_PI.GetValue()));
           argos::Real jitterDist  = RNG->Uniform(argos::CRange<argos::Real>(0.0, (argos::Real)0.8));
+
           argos::CVector2 jitter(jitterDist * cos(jitterAngle), jitterDist * sin(jitterAngle));
           SetTarget(GetTarget() + jitter);
           isInformed = true;
@@ -584,33 +612,42 @@ void CPFA_controller::Returning() {
                 
     }
 	// Take a small step towards the nest so we don't overshoot by too much is we miss it
-    else
-    {
-        // Build pheromone trail waypoints while carrying food back
-        if(IsHoldingFood() && SimulationTick() % LoopFunctions->DrawDensityRate == 0) {
-            TrailToShare.push_back(GetPosition());
-        }
+    // else
+    // {
+    //     // Build pheromone trail waypoints while carrying food back
+    //     if(IsHoldingFood() && SimulationTick() % LoopFunctions->DrawDensityRate == 0) {
+    //         TrailToShare.push_back(GetPosition());
+    //     }
 
-        if(IsAtTarget())
-        {
-        //argos::LOG<<"heading to true in returning"<<endl;
-        //SetIsHeadingToNest(false); // Turn off error for this
-        //SetTarget(LoopFunctions->NestPosition);
-        //randomly search for the nest
-        argos::Real USCV = LoopFunctions->UninformedSearchVariation.GetValue();
-        argos::Real rand = RNG->Gaussian(USCV);
+    //     if(IsAtTarget())
+    //     {
+    //     //argos::LOG<<"heading to true in returning"<<endl;
+    //     //SetIsHeadingToNest(false); // Turn off error for this
+    //     //SetTarget(LoopFunctions->NestPosition);
+    //     //randomly search for the nest
+    //     argos::Real USCV = LoopFunctions->UninformedSearchVariation.GetValue();
+    //     argos::Real rand = RNG->Gaussian(USCV);
 
-        argos::CRadians rotation(rand);
-        argos::CRadians angle1(rotation);
-        argos::CRadians angle2(GetHeading());
-        argos::CRadians turn_angle(angle1 + angle2);
-        argos::CVector2 turn_vector(SearchStepSize, turn_angle);
-        SetIsHeadingToNest(false);
-        SetTarget(turn_vector + GetPosition());
-        }
-        //detect other robots in its camera view
+    //     argos::CRadians rotation(rand);
+    //     argos::CRadians angle1(rotation);
+    //     argos::CRadians angle2(GetHeading());
+    //     argos::CRadians turn_angle(angle1 + angle2);
+    //     argos::CVector2 turn_vector(SearchStepSize, turn_angle);
+    //     SetIsHeadingToNest(false);
+    //     SetTarget(turn_vector + GetPosition());
+    //     }
+    //     //detect other robots in its camera view
         
-    }		
+    // }		
+
+	else {
+    if (IsHoldingFood() && SimulationTick() % LoopFunctions->DrawDensityRate == 0) {
+        TrailToShare.push_back(GetPosition());
+    }
+    // Just drive straight to the nest — no random walk
+    SetIsHeadingToNest(true);
+    SetTarget(LoopFunctions->NestPosition);
+}
 }
 
 void CPFA_controller::SetRandomSearchLocation() {
@@ -638,8 +675,8 @@ void CPFA_controller::SetRandomSearchLocation() {
 		y = RNG->Uniform(ForageRangeY);
 	}
 		
-	SetIsHeadingToNest(true); // Turn off error for this
-	SetTarget(argos::CVector2(x, y));
+	SetIsHeadingToNest(false); // Joanna -- change so robots dont linger
+    SetTarget(argos::CVector2(x, y));
 }
 
 /*****
@@ -967,6 +1004,14 @@ void CPFA_controller::UpdateTargetRayList() {
 
 void CPFA_controller::ReceivePheromones(std::vector<Pheromone> incoming) {
 
+
+	// **-- Joanna: debugging incoming pheromone waypoints
+    if (!incoming.empty()) {
+        argos::LOG << GetId() << " received " << incoming.size() 
+                   << " pheromones | my list before: " << LocalPheromoneList.size()
+                   << std::endl;
+    }
+
     argos::Real t = (argos::Real)(SimulationTick() / SimulationTicksPerSecond());
     for (Pheromone inWP : incoming) {
         if (!inWP.IsActive()) continue;
@@ -995,13 +1040,14 @@ void CPFA_controller::ReceivePheromones(std::vector<Pheromone> incoming) {
     LocalPheromoneList.erase(LocalPheromoneList.begin() + MAX_LOCAL_PHEROMONES, LocalPheromoneList.end());
 	}
 
-    // Decay and prune local list
-    std::vector<Pheromone> active;
-    for (Pheromone& p : LocalPheromoneList) {
-        p.Update(t);
-        if (p.IsActive()) active.push_back(p);
-    }
-    LocalPheromoneList = active;
+	// commented out this section because it is redundant with the decay that happens in the pheromone class
+
+    // std::vector<Pheromone> active;
+    // for (Pheromone& p : LocalPheromoneList) {
+    //     p.Update(t);
+    //     if (p.IsActive()) active.push_back(p);
+    // }
+    // LocalPheromoneList = active;
 }
 
 

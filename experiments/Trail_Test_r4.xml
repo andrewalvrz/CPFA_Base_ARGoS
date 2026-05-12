@@ -5,7 +5,7 @@ and resource amount-->
 
   <framework>
     <system threads="0"/>
-    <experiment length="6000" random_seed="0" ticks_per_second="10"/>
+    <experiment length="720" random_seed="0" ticks_per_second="10"/>
   </framework>
 
   <controllers>
@@ -28,11 +28,11 @@ and resource amount-->
  <!-- changed the parameters for the algorithm -->
   <loop_functions label="CPFA_loop_functions" library="build/source/CPFA/libCPFA_loop_functions">
     <CPFA PrintFinalScore="0" ProbabilityOfReturningToNest="0.0067" ProbabilityOfSwitchingToSearching="0.344" RateOfInformedSearchDecay="1.99" RateOfLayingPheromone="0.5" RateOfPheromoneDecay="0.5783657691204793" RateOfSiteFidelity="2.88" UninformedSearchVariation="7.77"/>
-    <settings ClusterWidthX="8" ClusterWidthY="8" DrawDensityRate="4" DrawIDs="1"
-      DrawTargetRays="1" DrawTrails="1" FoodDistribution="2" FoodItemCount="256"
-      FoodRadius="0.05" MaxSimCounter="1" MaxSimTimeInSeconds="1800"
+    <settings ClusterWidthX="8" ClusterWidthY="8" DrawDensityRate="1" DrawIDs="0"
+      DrawTargetRays="0" DrawTrails="0" FoodDistribution="2" FoodItemCount="256"
+      FoodRadius="0.05" MaxSimCounter="1" MaxSimTimeInSeconds="720"
       NestElevation="0.001" NestPosition="0,0" NestRadius="0.3" NumberOfClusters="4" OutputData="0"
-      PowerlawFoodUnitCount="256" VariableFoodPlacement="0"/>
+      PowerlawFoodUnitCount="256" VariableFoodPlacement="1"/>
   </loop_functions>
 
   <arena center="0,0,0.5" size="10.0, 10.0, 1">
@@ -99,7 +99,7 @@ and resource amount-->
 
   <media><led id="leds"/></media>
 
-  <visualization>
+  <!-- <visualization>
   <qt-opengl>
     <camera>
       <placements>
@@ -108,6 +108,6 @@ and resource amount-->
     </camera>
     <user_functions label="CPFA_qt_user_functions"/>
   </qt-opengl>
-</visualization>
+</visualization> -->
 
 </argos-configuration>

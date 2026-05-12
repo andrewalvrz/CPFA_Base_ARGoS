@@ -667,7 +667,7 @@ void CPFA_loop_functions::SharePheromonesAmongNeighbors() {
         for (size_t j = i + 1; j < controllers.size(); j++) {
             CVector2 posA = controllers[i]->GetPosition();
             CVector2 posB = controllers[j]->GetPosition();
-            if ((posA - posB).Length() <= 4.0) {
+            if ((posA - posB).Length() <= 2.0) {
                 std::vector<Pheromone> listA = controllers[i]->GetLocalPheromones();
                 std::vector<Pheromone> listB = controllers[j]->GetLocalPheromones();
                 controllers[i]->ReceivePheromones(listB);
