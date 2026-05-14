@@ -101,14 +101,14 @@ void CPFA_loop_functions::Init(argos::TConfigurationNode &node) {
 
         ArenaWidth = ArenaSize[0];
         
-        if(abs(NestPosition.GetX()) < -1) //quad arena
-        {
-            NestRadius *= sqrt(1 + log(ArenaWidth)/log(2));
-        }
-        else
-        {
-            NestRadius *= sqrt(log(ArenaWidth)/log(2));
-        }
+        // if(abs(NestPosition.GetX()) < -1) //quad arena
+        // {
+        //     NestRadius *= sqrt(1 + log(ArenaWidth)/log(2));
+        // }
+        // else
+        // {
+        //     NestRadius *= sqrt(log(ArenaWidth)/log(2));
+        // } // do not overwrite nest radius
         argos::LOG<<"NestRadius="<<NestRadius<<endl;
 	   // Send a pointer to this loop functions object to each controller.
 	   argos::CSpace::TMapPerType& footbots = GetSpace().GetEntitiesByType("foot-bot");
